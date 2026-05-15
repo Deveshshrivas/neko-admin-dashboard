@@ -60,7 +60,13 @@ export function MessagesThread({ conversation, onClose }: MessagesThreadProps) {
   const [sendError, setSendError] = useState<string | null>(null)
   const [reply, setReply] = useState('')
   const [isHumanMode, setIsHumanMode] = useState(false)
+  const sendModeRef = useRef<'bot' | 'human'>('bot')
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  const setSendMode = (mode: 'bot' | 'human') => {
+    sendModeRef.current = mode
+    setIsHumanMode(mode === 'human')
+  }
 
   // Fetch customer details
   useEffect(() => {
@@ -137,7 +143,8 @@ export function MessagesThread({ conversation, onClose }: MessagesThreadProps) {
     }
 
     const createdAt = new Date().toISOString()
-    const messageRole = isHumanMode ? 'employee' : 'bot'
+    const sendMode = sendModeRef.current
+    const messageRole = sendMode === 'human' ? 'employee' : 'bot'
     
     const optimisticMessage: Message = {
       id: `pending-${createdAt}`,
@@ -157,7 +164,7 @@ export function MessagesThread({ conversation, onClose }: MessagesThreadProps) {
       processing_status: 'processing',
       llm_intent: null,
       llm_confidence: null,
-      metadata: { source: 'admin_dashboard', pending: true, mode: isHumanMode ? 'human' : 'bot' },
+      metadata: { source: 'admin_dashboard', pending: true, mode: sendMode },
       created_at: createdAt,
     }
 
@@ -169,7 +176,8 @@ export function MessagesThread({ conversation, onClose }: MessagesThreadProps) {
     const payload = {
       0: { status: conversation.status },
       source: 'admin_dashboard',
-      event: isHumanMode ? 'human_reply' : 'bot_reply',
+      send_mode: sendMode,
+      event: sendMode === 'human' ? 'human_reply' : 'bot_reply',
       status: conversation.status,
       text,
       message: {
@@ -242,7 +250,7 @@ export function MessagesThread({ conversation, onClose }: MessagesThreadProps) {
           {/* Mode Toggle */}
           <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-lg">
             <button
-              onClick={() => setIsHumanMode(false)}
+              onClick={() => setSendMode('bot')}
               className={`flex items-center gap-1 px-3 py-1 rounded-lg transition-colors ${
                 !isHumanMode
                   ? 'bg-blue-500 text-white'
@@ -254,7 +262,7 @@ export function MessagesThread({ conversation, onClose }: MessagesThreadProps) {
               <span className="text-sm font-medium">Bot</span>
             </button>
             <button
-              onClick={() => setIsHumanMode(true)}
+              onClick={() => setSendMode('human')}
               className={`flex items-center gap-1 px-3 py-1 rounded-lg transition-colors ${
                 isHumanMode
                   ? 'bg-green-500 text-white'
