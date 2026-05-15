@@ -1,0 +1,14 @@
+node_modules/
+node_modules/dist/
+dist/
+build/
+coverage/
+*.log
+*.tsbuildinfo
+.DS_Store
+.env
+.idea/
+.vscode/
+.env.local
+.env.development.local
+SUPERBASE_TRUSTED_ORIGINS
