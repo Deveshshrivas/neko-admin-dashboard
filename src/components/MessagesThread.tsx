@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
-import { Conversation, Customer, Message } from '../lib/types'
+import { ChannelAccount, Conversation, Customer, CustomerIdentity, Message } from '../lib/types'
 import { useMessagesByConversation as fetchMessagesByConversation } from '../lib/db-hooks'
 import {
   fetchConversationById,
+  fetchChannelAccountById,
   fetchCustomerById,
+  fetchCustomerIdentityForConversation,
   fetchLatestHandoverSessionByConversation,
 } from '../lib/db-hooks-v2'
 import { N8N_CONFIG } from '../lib/schema'
@@ -52,6 +54,8 @@ function formatSummaryLines(summary: string | null | undefined) {
 export function MessagesThread({ conversation, onClose }: MessagesThreadProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [customer, setCustomer] = useState<Customer | null>(null)
+  const [channelAccount, setChannelAccount] = useState<ChannelAccount | null>(null)
+  const [customerIdentity, setCustomerIdentity] = useState<CustomerIdentity | null>(null)
   const [summaryLines, setSummaryLines] = useState<string[]>([])
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -84,6 +88,32 @@ export function MessagesThread({ conversation, onClose }: MessagesThreadProps) {
       setCustomer(null)
     }
   }, [conversation?.customer_id])
+
+  // Fetch channel routing data required by n8n/WhatsApp dispatch.
+  useEffect(() => {
+    if (!conversation?.customer_id || !conversation?.channel_account_id) {
+      setChannelAccount(null)
+      setCustomerIdentity(null)
+      return
+    }
+
+    Promise.all([
+      fetchChannelAccountById(conversation.channel_account_id).catch((err) => {
+        console.error('Failed to fetch channel account:', err)
+        return null
+      }),
+      fetchCustomerIdentityForConversation(
+        conversation.customer_id,
+        conversation.channel_account_id,
+      ).catch((err) => {
+        console.error('Failed to fetch customer identity:', err)
+        return null
+      }),
+    ]).then(([account, identity]) => {
+      setChannelAccount(account)
+      setCustomerIdentity(identity)
+    })
+  }, [conversation?.customer_id, conversation?.channel_account_id])
 
   // Fetch n8n handover/conversation summary
   useEffect(() => {
@@ -145,6 +175,8 @@ export function MessagesThread({ conversation, onClose }: MessagesThreadProps) {
     const createdAt = new Date().toISOString()
     const sendMode = sendModeRef.current
     const messageRole = sendMode === 'human' ? 'employee' : 'bot'
+    const senderWaPhone = customerIdentity?.external_id || customer?.phone || ''
+    const phoneNumberId = channelAccount?.external_id || channelAccount?.wa_phone_number || ''
     
     const optimisticMessage: Message = {
       id: `pending-${createdAt}`,
@@ -189,8 +221,11 @@ export function MessagesThread({ conversation, onClose }: MessagesThreadProps) {
       },
       recipient: {
         customer_id: conversation.customer_id,
-        whatsapp_phone: customer?.phone || null,
+        whatsapp_phone: senderWaPhone || null,
+        display_name_on_platform: customerIdentity?.display_name_on_platform || null,
       },
+      sender_wa_phone: senderWaPhone,
+      phone_number_id: phoneNumberId,
       conversation: {
         id: conversation.id,
         status: conversation.status,
@@ -198,6 +233,7 @@ export function MessagesThread({ conversation, onClose }: MessagesThreadProps) {
         channel_account_id: conversation.channel_account_id,
         branch_id: conversation.branch_id,
       },
+      channel_account: channelAccount,
       customer,
     }
 
@@ -209,14 +245,15 @@ export function MessagesThread({ conversation, onClose }: MessagesThreadProps) {
       })
 
       if (!response.ok) {
-        throw new Error(`n8n returned ${response.status}`)
+        const responseText = await response.text().catch(() => '')
+        throw new Error(`n8n returned ${response.status}${responseText ? `: ${responseText}` : ''}`)
       }
 
       const refreshed = await fetchMessagesByConversation(conversation.id)
       setMessages(refreshed.data)
     } catch (err) {
       console.error('Failed to send reply through n8n:', err)
-      setSendError('Failed to send message through n8n')
+      setSendError(err instanceof Error ? err.message : 'Failed to send message through n8n')
       setMessages((current) => current.filter((message) => message.id !== optimisticMessage.id))
       setReply(text)
     } finally {

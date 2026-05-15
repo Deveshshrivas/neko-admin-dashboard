@@ -2,6 +2,7 @@ import { supabase, isSupabaseConfigured } from './supabase'
 import { getCurrentBranch } from './schema'
 import type {
   Customer,
+  CustomerIdentity,
   Conversation,
   Message,
   Booking,
@@ -580,4 +581,35 @@ export async function fetchChannelAccounts(branchId?: string) {
 
   if (error) throw error
   return { data: (data as ChannelAccount[]) || [], count: count || 0 }
+}
+
+export async function fetchChannelAccountById(id: string) {
+  if (!isSupabaseConfigured) return null
+
+  const { data, error } = await supabase
+    .from('channel_accounts')
+    .select('*')
+    .eq('id', id)
+    .single()
+
+  if (error) throw error
+  return (data as ChannelAccount) || null
+}
+
+export async function fetchCustomerIdentityForConversation(
+  customerId: string,
+  channelAccountId: string,
+) {
+  if (!isSupabaseConfigured) return null
+
+  const { data, error } = await supabase
+    .from('customer_identities')
+    .select('*')
+    .eq('customer_id', customerId)
+    .eq('channel_account_id', channelAccountId)
+    .eq('channel', 'whatsapp')
+    .limit(1)
+
+  if (error) throw error
+  return ((data as CustomerIdentity[]) || [])[0] || null
 }
