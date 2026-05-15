@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { DataTable, TableColumn } from '../components/DataTable'
 import { StatusBadge } from '../components/StatusBadge'
-import { useConversations } from '../lib/db-hooks'
+import { useConversations as fetchConversations } from '../lib/db-hooks'
 
 interface Conversation {
   id: string
@@ -23,9 +23,9 @@ export function ConversationsPage() {
     async function fetchData() {
       setLoading(true)
       try {
-        console.log('🔍 Fetching conversations - page:', page, 'status:', status, 'search:', searchTerm, 'branch:', branchId)
+        console.log('Fetching conversations - page:', page, 'status:', status, 'search:', searchTerm)
         // Pass null to fetch ALL conversations regardless of branch
-        const result = await useConversations(page, status, searchTerm, null)
+        const result = await fetchConversations(page, status, searchTerm, null)
         console.log('✅ Conversations fetched:', result)
         setData(result.data)
         setTotal(result.count)
