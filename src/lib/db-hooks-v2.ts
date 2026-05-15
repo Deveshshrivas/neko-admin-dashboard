@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabase'
-import { TABLES, getCurrentBranch } from './schema'
+import { getCurrentBranch } from './schema'
 import type {
   Customer,
   Conversation,
@@ -14,7 +14,6 @@ import type {
   FaqIntent,
   HandoverSession,
   BranchAlias,
-  CustomerIdentity,
 } from './types'
 
 // ============================================
@@ -440,6 +439,20 @@ export async function fetchHandoverSessions(page = 1, branchId?: string, status?
   return { data: (data as HandoverSession[]) || [], count: count || 0 }
 }
 
+export async function fetchLatestHandoverSessionByConversation(conversationId: string) {
+  if (!isSupabaseConfigured) return null
+
+  const { data, error } = await supabase
+    .from('handover_sessions')
+    .select('*')
+    .eq('conversation_id', conversationId)
+    .order('started_at', { ascending: false })
+    .limit(1)
+
+  if (error) throw error
+  return ((data as HandoverSession[]) || [])[0] || null
+}
+
 // ============================================
 // FAQ INTENTS
 // ============================================
@@ -502,7 +515,7 @@ export async function fetchDashboardStats(branchId?: string) {
 
     const results = await Promise.all(queries)
 
-    let stats = {
+    const stats = {
       totalCustomers: results[0].count || 0,
       activeConversations: results[1].count || 0,
       pendingBookings: results[2].count || 0,

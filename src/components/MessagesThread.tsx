@@ -1,18 +1,59 @@
 import { useState, useEffect, useRef } from 'react'
 import { Conversation, Customer, Message } from '../lib/types'
 import { useMessagesByConversation as fetchMessagesByConversation } from '../lib/db-hooks'
-import { fetchCustomerById } from '../lib/db-hooks-v2'
+import {
+  fetchConversationById,
+  fetchCustomerById,
+  fetchLatestHandoverSessionByConversation,
+} from '../lib/db-hooks-v2'
 import { N8N_CONFIG } from '../lib/schema'
-import { Send, Loader, Zap, User } from 'lucide-react'
+import { Send, Loader, Zap, User, FileText } from 'lucide-react'
 
 interface MessagesThreadProps {
   conversation: Conversation | null
   onClose?: () => void
 }
 
+interface SummaryLine {
+  role?: string
+  content_text?: string | null
+  content?: string | null
+  message_type?: string | null
+}
+
+function formatSummaryLines(summary: string | null | undefined) {
+  if (!summary) return []
+
+  try {
+    const parsed = JSON.parse(summary) as unknown
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map((item) => {
+          if (!item || typeof item !== 'object') return ''
+          const line = item as SummaryLine
+          const label = line.role ? `${line.role}: ` : ''
+          const text = line.content_text || line.content || line.message_type || ''
+          return `${label}${text}`.trim()
+        })
+        .filter(Boolean)
+    }
+
+    if (parsed && typeof parsed === 'object' && 'summary' in parsed) {
+      const value = (parsed as { summary?: unknown }).summary
+      return typeof value === 'string' && value.trim() ? [value.trim()] : []
+    }
+  } catch {
+    return [summary]
+  }
+
+  return [summary]
+}
+
 export function MessagesThread({ conversation, onClose }: MessagesThreadProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [customer, setCustomer] = useState<Customer | null>(null)
+  const [summaryLines, setSummaryLines] = useState<string[]>([])
+  const [summaryLoading, setSummaryLoading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -37,6 +78,26 @@ export function MessagesThread({ conversation, onClose }: MessagesThreadProps) {
       setCustomer(null)
     }
   }, [conversation?.customer_id])
+
+  // Fetch n8n handover/conversation summary
+  useEffect(() => {
+    if (!conversation?.id) {
+      setSummaryLines([])
+      return
+    }
+
+    setSummaryLoading(true)
+    Promise.all([
+      fetchConversationById(conversation.id).catch(() => conversation),
+      fetchLatestHandoverSessionByConversation(conversation.id).catch(() => null),
+    ])
+      .then(([freshConversation, handoverSession]) => {
+        const handoverLines = formatSummaryLines(handoverSession?.summary)
+        const conversationLines = formatSummaryLines(freshConversation?.summary_th)
+        setSummaryLines(handoverLines.length > 0 ? handoverLines : conversationLines)
+      })
+      .finally(() => setSummaryLoading(false))
+  }, [conversation])
 
   // Fetch messages
   useEffect(() => {
@@ -216,6 +277,28 @@ export function MessagesThread({ conversation, onClose }: MessagesThreadProps) {
           )}
         </div>
       </div>
+
+      {(summaryLoading || summaryLines.length > 0) && (
+        <div className="border-b border-gray-200 bg-amber-50 px-4 py-3">
+          <div className="flex items-start gap-2">
+            <FileText className="mt-0.5 flex-shrink-0 text-amber-700" size={16} />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-amber-900">Handover summary</p>
+              {summaryLoading ? (
+                <p className="text-sm text-amber-700">Loading summary...</p>
+              ) : (
+                <div className="mt-1 space-y-1">
+                  {summaryLines.slice(0, 5).map((line, index) => (
+                    <p key={`${index}-${line}`} className="text-sm text-amber-900">
+                      {line}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Messages Container */}
       <div className="flex-1 min-h-0 overflow-y-auto p-4 bg-gradient-to-b from-gray-50 to-white flex flex-col">
