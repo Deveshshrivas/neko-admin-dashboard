@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Link, Outlet } from 'react-router-dom'
 import {
   Menu,
   X,
@@ -79,14 +79,14 @@ export function Layout() {
         {/* Menu */}
         <nav className="flex-1 p-4 space-y-2">
           {menuItems.map((item) => (
-            <a
+            <Link
               key={item.to}
-              href={item.to}
+              to={item.to}
               className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-800 transition-colors"
             >
               <item.icon size={20} />
               {sidebarOpen && <span>{item.label}</span>}
-            </a>
+            </Link>
           ))}
         </nav>
 

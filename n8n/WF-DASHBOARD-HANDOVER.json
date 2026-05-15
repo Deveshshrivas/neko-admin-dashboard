@@ -1,0 +1,305 @@
+{
+  "name": "WF-DASHBOARD-HANDOVER: Send Human Reply",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "dashboard-human-reply",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "c4db8b51-8a21-4ab6-b639-3fbad6f32af7",
+      "name": "1. Webhook: Dashboard Reply",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -720,
+        160
+      ],
+      "webhookId": "dashboard-human-reply"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst conversation = body.conversation || {};\nconst message = body.message || {};\nconst recipient = body.recipient || {};\nconst text = String(body.text || message.content_text || '').trim();\n\nif (!text) throw new Error('Missing dashboard reply text');\nif (!conversation.id) throw new Error('Missing conversation.id');\nif (!conversation.channel_account_id) throw new Error('Missing conversation.channel_account_id');\n\nreturn [{\n  json: {\n    source: 'dashboard',\n    event: body.event || 'human_reply',\n    status: body.status || conversation.status || '',\n    conversation_id: conversation.id,\n    customer_id: conversation.customer_id || recipient.customer_id || null,\n    channel_account_id: conversation.channel_account_id,\n    branch_id: conversation.branch_id || null,\n    sender_wa_phone: recipient.whatsapp_phone || body.sender_wa_phone || body.customer?.phone || '',\n    phone_number_id: body.phone_number_id || body.channel_account?.external_id || '',\n    content_text: text,\n    created_at: new Date().toISOString(),\n  }\n}];"
+      },
+      "id": "241fb8e4-4549-4cd5-9013-f75c72f8e095",
+      "name": "2. Code: Normalize Dashboard Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "human-mode",
+              "leftValue": "={{ ['awaiting_human','human_handling'].includes($json.status || '') }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7824e53e-c0b9-426e-9b6f-c17b9e730d4d",
+      "name": "3. IF: Conversation Is Human Mode?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -240,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL + '/rest/v1/messages' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ conversation_id: $json.conversation_id, channel_account_id: $json.channel_account_id, channel: 'whatsapp', role: 'employee', direction: 'outbound', message_type: 'text', content_text: $json.content_text, content_media_url: null, external_message_id: null, processing_status: 'processing', metadata: { source: 'admin_dashboard', dispatch: { sender_wa_phone: $json.sender_wa_phone, phone_number_id: $json.phone_number_id, message_type: 'text', body: $json.content_text } } }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "47dbd2a4-4a4f-4e67-b445-b70269166c14",
+      "name": "4. INSERT: employee outbound message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        32,
+        64
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst row = Array.isArray(raw) ? raw[0] : raw;\nif (!row?.id) throw new Error('Message insert returned no row: ' + JSON.stringify(raw));\nreturn [{ json: row }];"
+      },
+      "id": "0a9f9193-307e-4a33-8afd-7a6f2436568f",
+      "name": "5. Code: Unwrap Message Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        272,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_WF_WA_3_DISPATCHER_ID",
+          "mode": "id"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "message_id": "={{ $json.id }}",
+            "conversation_id": "={{ $json.conversation_id }}",
+            "source": "dashboard",
+            "content_text": "={{ $json.content_text }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "conversation_id",
+              "displayName": "conversation_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "content_text",
+              "displayName": "content_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "id": "91d96f28-0225-4075-b5ac-2c36fcbf3d16",
+      "name": "6. Execute WF-3 Dispatcher",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        512,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, message_id: $('5. Code: Unwrap Message Row').item.json.id, conversation_id: $('5. Code: Unwrap Message Row').item.json.conversation_id }) }}",
+        "options": {}
+      },
+      "id": "475492ca-e414-42c6-9837-f1405b2ff28d",
+      "name": "7. Respond: Sent",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        752,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 409,
+        "responseBody": "={{ JSON.stringify({ ok: false, error: 'Conversation is not in human mode', status: $json.status }) }}",
+        "options": {}
+      },
+      "id": "62cc33a0-2ecb-4638-94de-48cf1b621d21",
+      "name": "8. Respond: Not Human Mode",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        32,
+        288
+      ]
+    }
+  ],
+  "connections": {
+    "1. Webhook: Dashboard Reply": {
+      "main": [
+        [
+          {
+            "node": "2. Code: Normalize Dashboard Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Code: Normalize Dashboard Payload": {
+      "main": [
+        [
+          {
+            "node": "3. IF: Conversation Is Human Mode?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. IF: Conversation Is Human Mode?": {
+      "main": [
+        [
+          {
+            "node": "4. INSERT: employee outbound message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "8. Respond: Not Human Mode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. INSERT: employee outbound message": {
+      "main": [
+        [
+          {
+            "node": "5. Code: Unwrap Message Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Code: Unwrap Message Row": {
+      "main": [
+        [
+          {
+            "node": "6. Execute WF-3 Dispatcher",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Execute WF-3 Dispatcher": {
+      "main": [
+        [
+          {
+            "node": "7. Respond: Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
