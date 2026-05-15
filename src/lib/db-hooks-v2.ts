@@ -343,10 +343,13 @@ export async function fetchServiceCategories() {
     .from('services')
     .select('category')
     .eq('is_active', true)
-    .distinct()
 
   if (error) throw error
-  return data?.map(d => d.category) || []
+  const categories = ((data || []) as Array<{ category: string | null }>)
+    .map((row) => row.category)
+    .filter((category): category is string => Boolean(category))
+
+  return [...new Set(categories)]
 }
 
 // ============================================

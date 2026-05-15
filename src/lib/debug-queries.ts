@@ -11,7 +11,7 @@ export const debugQueries = {
     }
 
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('customers')
         .select('id')
         .limit(1)

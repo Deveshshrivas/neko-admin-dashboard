@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
-import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { StatCard } from '../components/StatCard.tsx'
-import { StatusBadge } from '../components/StatusBadge.tsx'
 import { Users, MessageCircle, Calendar, AlertTriangle, MapPin } from 'lucide-react'
 import { useDashboardStats, useBranches } from '../lib/db-hooks'
 import { getCurrentBranch, setCurrentBranch } from '../lib/schema'
